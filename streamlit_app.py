@@ -1,11 +1,10 @@
 import streamlit as st
 import pandas as pd
 from supabase import create_client
-from datetime import datetime
 
-# --------------------------------------------------
+# =========================================================
 # PAGE CONFIGURATION
-# --------------------------------------------------
+# =========================================================
 
 st.set_page_config(
     page_title="Student Digital Skill Assessment",
@@ -13,45 +12,84 @@ st.set_page_config(
     layout="wide"
 )
 
-# --------------------------------------------------
+# =========================================================
 # SUPABASE CONNECTION
-# --------------------------------------------------
+# =========================================================
 
 @st.cache_resource
 def init_supabase():
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-    return create_client(url, key)
+    return create_client(
+        st.secrets["SUPABASE_URL"],
+        st.secrets["SUPABASE_KEY"]
+    )
 
 supabase = init_supabase()
 
-# --------------------------------------------------
-# SIDEBAR NAVIGATION
-# --------------------------------------------------
 
-st.sidebar.title("🎓 Skill Assessment")
+# =========================================================
+# HELPER FUNCTIONS
+# =========================================================
+
+def calculate_readiness(excel, python, data_analysis, ai):
+    total = excel + python + data_analysis + ai
+    score = (total / 20) * 100
+
+    if score < 40:
+        level = "Beginner"
+    elif score < 60:
+        level = "Developing"
+    elif score < 80:
+        level = "Ready"
+    else:
+        level = "Advanced"
+
+    return score, level
+
+
+def student_exists(student_id):
+
+    result = (
+        supabase
+        .table("student_responses")
+        .select("student_id")
+        .eq("student_id", student_id.strip())
+        .execute()
+    )
+
+    return len(result.data) > 0
+
+
+# =========================================================
+# SIDEBAR
+# =========================================================
+
+st.sidebar.title("🎓 Digital Skills")
 
 page = st.sidebar.radio(
-    "Navigation",
-    ["📝 Student Assessment", "📊 Dashboard"]
+    "Select",
+    [
+        "📝 Skill Assessment",
+        "🔐 Faculty Dashboard"
+    ]
 )
 
-# ==================================================
-# STUDENT ASSESSMENT
-# ==================================================
 
-if page == "📝 Student Assessment":
+# =========================================================
+# STUDENT ASSESSMENT
+# =========================================================
+
+if page == "📝 Skill Assessment":
 
     st.title("🎓 Student Digital Skill Assessment")
 
     st.write(
-        "This short assessment helps us understand students' "
-        "digital skills and identify suitable training programs."
+        "This short assessment helps identify students' "
+        "current digital skills and future training needs."
     )
 
     st.info("⏱️ Approximate completion time: 2–3 minutes")
 
-    with st.form("skill_assessment_form"):
+    with st.form("student_form"):
 
         st.subheader("👤 Student Information")
 
@@ -98,43 +136,35 @@ if page == "📝 Student Assessment":
 
         st.divider()
 
-        # -------------------------------------------
+        # -------------------------------------------------
         # DIGITAL SKILLS
-        # -------------------------------------------
+        # -------------------------------------------------
 
         st.subheader("💻 Digital Skills")
 
-        st.write(
-            "Rate your present skill level from "
-            "**1 (Beginner) to 5 (Advanced).**"
+        st.caption(
+            "Rate your present skill level: "
+            "1 = Beginner and 5 = Advanced"
         )
 
         excel_skill = st.slider(
             "Excel / Spreadsheet Skills",
-            1,
-            5,
-            1
+            1, 5, 1
         )
 
         python_skill = st.slider(
             "Python Programming",
-            1,
-            5,
-            1
+            1, 5, 1
         )
 
         data_analysis_skill = st.slider(
             "Data Analysis",
-            1,
-            5,
-            1
+            1, 5, 1
         )
 
         ai_tools_skill = st.slider(
             "AI Tools (ChatGPT, Gemini, etc.)",
-            1,
-            5,
-            1
+            1, 5, 1
         )
 
         programming_experience = st.radio(
@@ -145,9 +175,9 @@ if page == "📝 Student Assessment":
 
         st.divider()
 
-        # -------------------------------------------
-        # TRAINING INTEREST
-        # -------------------------------------------
+        # -------------------------------------------------
+        # TRAINING NEEDS
+        # -------------------------------------------------
 
         st.subheader("🎯 Training Interests")
 
@@ -171,7 +201,7 @@ if page == "📝 Student Assessment":
         )
 
         comments = st.text_area(
-            "Additional comments / expectations (Optional)"
+            "Comments / expectations (Optional)"
         )
 
         submitted = st.form_submit_button(
@@ -179,14 +209,16 @@ if page == "📝 Student Assessment":
             use_container_width=True
         )
 
-    # -----------------------------------------------
+    # =====================================================
     # PROCESS SUBMISSION
-    # -----------------------------------------------
+    # =====================================================
 
     if submitted:
 
+        clean_id = student_id.strip()
+
         if (
-            not student_id.strip()
+            not clean_id
             or not student_name.strip()
             or program == "Select"
             or study_year == "Select"
@@ -194,185 +226,231 @@ if page == "📝 Student Assessment":
 
             st.error(
                 "⚠️ Please complete Student ID, Name, "
-                "Program and Year of Study."
+                "Program and Year."
             )
 
         else:
 
-            # Calculate readiness score
-
-            total_skill_score = (
-                excel_skill
-                + python_skill
-                + data_analysis_skill
-                + ai_tools_skill
-            )
-
-            readiness_score = (
-                total_skill_score / 20
-            ) * 100
-
-            # Determine readiness level
-
-            if readiness_score < 40:
-                readiness_level = "Beginner"
-
-            elif readiness_score < 60:
-                readiness_level = "Developing"
-
-            elif readiness_score < 80:
-                readiness_level = "Ready"
-
-            else:
-                readiness_level = "Advanced"
-
-            # Convert multiple selections to text
-
-            training_text = ", ".join(training_interest)
-
-            # Data sent to Supabase
-
-            response_data = {
-
-                "student_id":
-                    student_id.strip(),
-
-                "student_name":
-                    student_name.strip(),
-
-                "program":
-                    program,
-
-                "study_year":
-                    study_year,
-
-                "gender":
-                    gender,
-
-                "excel_skill":
-                    excel_skill,
-
-                "python_skill":
-                    python_skill,
-
-                "data_analysis_skill":
-                    data_analysis_skill,
-
-                "ai_tools_skill":
-                    ai_tools_skill,
-
-                "programming_experience":
-                    programming_experience,
-
-                "training_interest":
-                    training_text,
-
-                "willing_for_training":
-                    willing_for_training,
-
-                "comments":
-                    comments,
-
-                "readiness_score":
-                    readiness_score,
-
-                "readiness_level":
-                    readiness_level
-            }
-
             try:
 
-                supabase.table(
-                    "student_responses"
-                ).insert(
-                    response_data
-                ).execute()
+                # -----------------------------------------
+                # DUPLICATE CHECK
+                # -----------------------------------------
 
-                st.success(
-                    "✅ Assessment submitted successfully!"
-                )
+                if student_exists(clean_id):
 
-                st.subheader(
-                    "Your Digital Skill Readiness"
-                )
-
-                col1, col2 = st.columns(2)
-
-                with col1:
-
-                    st.metric(
-                        "Readiness Score",
-                        f"{readiness_score:.0f}%"
+                    st.warning(
+                        "⚠️ A response has already been "
+                        "submitted for this Student ID."
                     )
-
-                with col2:
-
-                    st.metric(
-                        "Readiness Level",
-                        readiness_level
-                    )
-
-                st.progress(
-                    int(readiness_score)
-                )
-
-                if readiness_score < 40:
 
                     st.info(
-                        "Recommended starting point: "
-                        "Digital fundamentals, Excel and "
-                        "basic data handling."
-                    )
-
-                elif readiness_score < 60:
-
-                    st.info(
-                        "Recommended next step: "
-                        "Python fundamentals and practical "
-                        "data-analysis exercises."
-                    )
-
-                elif readiness_score < 80:
-
-                    st.info(
-                        "Recommended next step: "
-                        "Applied Python, dashboards and "
-                        "AI-assisted data analysis."
+                        "If you believe this is an error, "
+                        "please contact the faculty coordinator."
                     )
 
                 else:
 
-                    st.info(
-                        "Recommended next step: "
-                        "Advanced analytics, machine learning "
-                        "and application development."
+                    readiness_score, readiness_level = (
+                        calculate_readiness(
+                            excel_skill,
+                            python_skill,
+                            data_analysis_skill,
+                            ai_tools_skill
+                        )
                     )
+
+                    response_data = {
+
+                        "student_id":
+                            clean_id,
+
+                        "student_name":
+                            student_name.strip(),
+
+                        "program":
+                            program,
+
+                        "study_year":
+                            study_year,
+
+                        "gender":
+                            gender,
+
+                        "excel_skill":
+                            excel_skill,
+
+                        "python_skill":
+                            python_skill,
+
+                        "data_analysis_skill":
+                            data_analysis_skill,
+
+                        "ai_tools_skill":
+                            ai_tools_skill,
+
+                        "programming_experience":
+                            programming_experience,
+
+                        "training_interest":
+                            ", ".join(training_interest),
+
+                        "willing_for_training":
+                            willing_for_training,
+
+                        "comments":
+                            comments,
+
+                        "readiness_score":
+                            readiness_score,
+
+                        "readiness_level":
+                            readiness_level
+                    }
+
+                    supabase.table(
+                        "student_responses"
+                    ).insert(
+                        response_data
+                    ).execute()
+
+                    st.success(
+                        "✅ Assessment submitted successfully!"
+                    )
+
+                    st.subheader(
+                        "Your Digital Skill Readiness"
+                    )
+
+                    c1, c2 = st.columns(2)
+
+                    c1.metric(
+                        "Readiness Score",
+                        f"{readiness_score:.0f}%"
+                    )
+
+                    c2.metric(
+                        "Readiness Level",
+                        readiness_level
+                    )
+
+                    st.progress(
+                        int(readiness_score)
+                    )
+
+                    if readiness_level == "Beginner":
+
+                        st.info(
+                            "Suggested starting point: "
+                            "Excel, digital fundamentals and "
+                            "basic data handling."
+                        )
+
+                    elif readiness_level == "Developing":
+
+                        st.info(
+                            "Suggested next step: "
+                            "Python fundamentals and practical "
+                            "data analysis."
+                        )
+
+                    elif readiness_level == "Ready":
+
+                        st.info(
+                            "Suggested next step: "
+                            "Applied Python, dashboards and "
+                            "AI-assisted analysis."
+                        )
+
+                    else:
+
+                        st.info(
+                            "Suggested next step: "
+                            "Machine learning, advanced analytics "
+                            "and application development."
+                        )
 
             except Exception as e:
 
                 st.error(
-                    "❌ Submission could not be saved."
+                    "❌ Something went wrong while "
+                    "processing the submission."
                 )
 
                 st.code(str(e))
 
 
-# ==================================================
-# DASHBOARD
-# ==================================================
+# =========================================================
+# FACULTY DASHBOARD LOGIN
+# =========================================================
 
-elif page == "📊 Dashboard":
+elif page == "🔐 Faculty Dashboard":
 
-    st.title("📊 Student Digital Skills Dashboard")
+    st.title("🔐 Faculty Dashboard")
 
-    st.write(
-        "Live analysis of responses collected through "
-        "the Student Skill Assessment."
+    # Initialize authentication state
+
+    if "admin_authenticated" not in st.session_state:
+        st.session_state.admin_authenticated = False
+
+    # -----------------------------------------------------
+    # LOGIN
+    # -----------------------------------------------------
+
+    if not st.session_state.admin_authenticated:
+
+        st.write(
+            "Faculty authorization is required "
+            "to access individual student data."
+        )
+
+        password = st.text_input(
+            "Faculty Password",
+            type="password"
+        )
+
+        if st.button(
+            "Login",
+            use_container_width=True
+        ):
+
+            if password == st.secrets["ADMIN_PASSWORD"]:
+
+                st.session_state.admin_authenticated = True
+                st.rerun()
+
+            else:
+
+                st.error(
+                    "Incorrect password."
+                )
+
+        st.stop()
+
+    # -----------------------------------------------------
+    # LOGOUT
+    # -----------------------------------------------------
+
+    top1, top2 = st.columns(
+        [5, 1]
     )
 
-    # -----------------------------------------------
+    with top1:
+
+        st.success(
+            "Faculty dashboard access granted."
+        )
+
+    with top2:
+
+        if st.button("Logout"):
+
+            st.session_state.admin_authenticated = False
+            st.rerun()
+
+    # =====================================================
     # LOAD DATA
-    # -----------------------------------------------
+    # =====================================================
 
     try:
 
@@ -384,17 +462,9 @@ elif page == "📊 Dashboard":
             .execute()
         )
 
-        data = response.data
-
-        if not data:
-
-            st.warning(
-                "No student responses have been submitted yet."
-            )
-
-            st.stop()
-
-        df = pd.DataFrame(data)
+        df = pd.DataFrame(
+            response.data
+        )
 
     except Exception as e:
 
@@ -403,26 +473,34 @@ elif page == "📊 Dashboard":
         )
 
         st.code(str(e))
+        st.stop()
+
+    if df.empty:
+
+        st.warning(
+            "No responses have been submitted yet."
+        )
 
         st.stop()
 
-    # -----------------------------------------------
-    # DASHBOARD FILTERS
-    # -----------------------------------------------
+    # =====================================================
+    # FILTERS
+    # =====================================================
 
-    st.subheader("🔎 Filters")
+    st.subheader("🔎 Analyse Students")
 
-    filter1, filter2 = st.columns(2)
+    f1, f2 = st.columns(2)
 
-    with filter1:
+    with f1:
 
-        program_options = [
-            "All"
-        ] + sorted(
-            df["program"]
-            .dropna()
-            .unique()
-            .tolist()
+        program_options = (
+            ["All"]
+            + sorted(
+                df["program"]
+                .dropna()
+                .unique()
+                .tolist()
+            )
         )
 
         selected_program = st.selectbox(
@@ -430,15 +508,16 @@ elif page == "📊 Dashboard":
             program_options
         )
 
-    with filter2:
+    with f2:
 
-        year_options = [
-            "All"
-        ] + sorted(
-            df["study_year"]
-            .dropna()
-            .unique()
-            .tolist()
+        year_options = (
+            ["All"]
+            + sorted(
+                df["study_year"]
+                .dropna()
+                .unique()
+                .tolist()
+            )
         )
 
         selected_year = st.selectbox(
@@ -465,18 +544,20 @@ elif page == "📊 Dashboard":
     if filtered_df.empty:
 
         st.warning(
-            "No responses match the selected filters."
+            "No responses match these filters."
         )
 
         st.stop()
 
+    # =====================================================
+    # KPIs
+    # =====================================================
+
     st.divider()
 
-    # -----------------------------------------------
-    # KPI CARDS
-    # -----------------------------------------------
-
-    total_responses = len(filtered_df)
+    total_students = len(
+        filtered_df
+    )
 
     average_readiness = (
         filtered_df["readiness_score"]
@@ -484,51 +565,61 @@ elif page == "📊 Dashboard":
         .mean()
     )
 
-    python_average = (
-        filtered_df["python_skill"]
-        .astype(float)
+    beginner_developing = (
+        filtered_df[
+            "readiness_level"
+        ]
+        .isin(
+            ["Beginner", "Developing"]
+        )
         .mean()
+        * 100
     )
 
-    ai_average = (
-        filtered_df["ai_tools_skill"]
-        .astype(float)
+    training_interest_rate = (
+        filtered_df[
+            "willing_for_training"
+        ]
+        .isin(
+            ["Yes", "Maybe"]
+        )
         .mean()
+        * 100
     )
 
-    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+    k1, k2, k3, k4 = st.columns(4)
 
-    kpi1.metric(
+    k1.metric(
         "Students",
-        total_responses
+        total_students
     )
 
-    kpi2.metric(
-        "Avg. Readiness",
+    k2.metric(
+        "Average Readiness",
         f"{average_readiness:.1f}%"
     )
 
-    kpi3.metric(
-        "Avg. Python Skill",
-        f"{python_average:.1f}/5"
+    k3.metric(
+        "Need Foundation Training",
+        f"{beginner_developing:.1f}%"
     )
 
-    kpi4.metric(
-        "Avg. AI Skill",
-        f"{ai_average:.1f}/5"
+    k4.metric(
+        "Training Interest",
+        f"{training_interest_rate:.1f}%"
     )
+
+    # =====================================================
+    # SKILL GAP ANALYSIS
+    # =====================================================
 
     st.divider()
 
-    # -----------------------------------------------
-    # AVERAGE SKILLS
-    # -----------------------------------------------
-
     st.subheader(
-        "📚 Average Digital Skill Levels"
+        "📊 Skill Gap Analysis"
     )
 
-    skill_columns = {
+    skills = {
 
         "Excel":
             "excel_skill",
@@ -543,35 +634,60 @@ elif page == "📊 Dashboard":
             "ai_tools_skill"
     }
 
-    skill_average = {}
+    skill_scores = {}
 
-    for skill_name, column_name in skill_columns.items():
+    for skill, column in skills.items():
 
-        skill_average[skill_name] = (
-            filtered_df[column_name]
+        skill_scores[skill] = (
+            filtered_df[column]
             .astype(float)
             .mean()
         )
 
-    skill_df = pd.DataFrame({
+    skill_df = pd.DataFrame(
+        {
+            "Skill":
+                skill_scores.keys(),
 
-        "Skill":
-            list(skill_average.keys()),
-
-        "Average Score":
-            list(skill_average.values())
-    })
+            "Average Score":
+                skill_scores.values()
+        }
+    )
 
     st.bar_chart(
         skill_df.set_index("Skill")
     )
 
-    # -----------------------------------------------
+    weakest_skill = min(
+        skill_scores,
+        key=skill_scores.get
+    )
+
+    strongest_skill = max(
+        skill_scores,
+        key=skill_scores.get
+    )
+
+    c1, c2 = st.columns(2)
+
+    c1.warning(
+        f"Priority Training Area: "
+        f"**{weakest_skill}** "
+        f"({skill_scores[weakest_skill]:.2f}/5)"
+    )
+
+    c2.success(
+        f"Strongest Skill Area: "
+        f"**{strongest_skill}** "
+        f"({skill_scores[strongest_skill]:.2f}/5)"
+    )
+
+    # =====================================================
     # READINESS DISTRIBUTION
-    # -----------------------------------------------
+    # =====================================================
 
     st.subheader(
-        "🎯 Digital Readiness Distribution"
+        "🎯 Readiness Distribution"
     )
 
     readiness_counts = (
@@ -585,125 +701,61 @@ elif page == "📊 Dashboard":
         readiness_counts
     )
 
-    # -----------------------------------------------
-    # PROGRAM DISTRIBUTION
-    # -----------------------------------------------
+    # =====================================================
+    # TRAINING DEMAND
+    # =====================================================
 
     st.subheader(
-        "🎓 Responses by Program"
-    )
-
-    program_counts = (
-        filtered_df[
-            "program"
-        ]
-        .value_counts()
-    )
-
-    st.bar_chart(
-        program_counts
-    )
-
-    # -----------------------------------------------
-    # TRAINING WILLINGNESS
-    # -----------------------------------------------
-
-    st.subheader(
-        "🙋 Willingness for Training"
-    )
-
-    willingness_counts = (
-        filtered_df[
-            "willing_for_training"
-        ]
-        .value_counts()
-    )
-
-    st.bar_chart(
-        willingness_counts
-    )
-
-    # -----------------------------------------------
-    # TRAINING INTEREST ANALYSIS
-    # -----------------------------------------------
-
-    st.subheader(
-        "🚀 Preferred Training Areas"
+        "🚀 Training Demand"
     )
 
     interests = []
 
-    for value in filtered_df[
-        "training_interest"
-    ].dropna():
+    for entry in (
+        filtered_df[
+            "training_interest"
+        ]
+        .dropna()
+    ):
 
-        if value:
+        if entry:
 
             interests.extend(
                 [
-                    item.strip()
-                    for item in value.split(",")
+                    x.strip()
+                    for x in entry.split(",")
                 ]
             )
 
     if interests:
 
-        interest_df = pd.Series(
-            interests
-        ).value_counts()
+        interest_counts = (
+            pd.Series(interests)
+            .value_counts()
+        )
 
         st.bar_chart(
-            interest_df
+            interest_counts
         )
 
-    else:
+        top_interest = (
+            interest_counts
+            .index[0]
+        )
 
         st.info(
-            "No training interests have been selected yet."
+            f"Most requested training area: "
+            f"**{top_interest}**"
         )
 
-    # -----------------------------------------------
-    # IDENTIFY TRAINING PRIORITY
-    # -----------------------------------------------
+    # =====================================================
+    # STUDENT DATA
+    # =====================================================
+
+    st.divider()
 
     st.subheader(
-        "🧭 Training Priority Analysis"
-    )
-
-    weakest_skill = min(
-        skill_average,
-        key=skill_average.get
-    )
-
-    strongest_skill = max(
-        skill_average,
-        key=skill_average.get
-    )
-
-    colA, colB = st.columns(2)
-
-    with colA:
-
-        st.warning(
-            f"Priority Training Area: "
-            f"**{weakest_skill}** "
-            f"({skill_average[weakest_skill]:.2f}/5)"
-        )
-
-    with colB:
-
-        st.success(
-            f"Strongest Current Area: "
-            f"**{strongest_skill}** "
-            f"({skill_average[strongest_skill]:.2f}/5)"
-        )
-
-    # -----------------------------------------------
-    # RESPONSE DATA
-    # -----------------------------------------------
-
-    st.subheader(
-        "📋 Response Data"
+        "📋 Individual Student Data"
     )
 
     display_columns = [
@@ -729,9 +781,9 @@ elif page == "📊 Dashboard":
         hide_index=True
     )
 
-    # -----------------------------------------------
+    # =====================================================
     # DOWNLOAD
-    # -----------------------------------------------
+    # =====================================================
 
     csv = (
         filtered_df
@@ -740,9 +792,9 @@ elif page == "📊 Dashboard":
     )
 
     st.download_button(
-        "⬇️ Download Filtered Data",
+        "⬇️ Download Filtered Dataset",
         csv,
-        "student_skill_responses.csv",
+        "student_skill_assessment.csv",
         "text/csv",
         use_container_width=True
     )
